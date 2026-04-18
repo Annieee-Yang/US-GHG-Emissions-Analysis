@@ -1,0 +1,328 @@
+---
+title: "U.S. Emissions: Total vs Intensity"
+subtitle: INFO 201 Project Report
+author: Annie Yang, Yuxin Zheng
+date: today
+
+format:
+  html:
+    toc: true
+    embed-resources: true
+
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r}
+library(tidyverse)
+national<-read_csv("data.csv")
+intensity <- read_csv("intensity.csv") %>%
+rename(
+    intensity_no_margins = `Supply Chain Emission Factors without Margins`,
+    intensity_with_margins = `Supply Chain Emission Factors with Margins`
+  )
+```
+
+## Introduction
+
+Greenhouse gas emissions across U.S. sectors can be measured in different ways, and the choice of measure affects how environmental impact is interpreted. One common way to measure emissions is by looking at total emissions, which reflect each sector’s overall contribution to national emissions. According to the [U.S. Environmental Protection Agency (EPA)](https://www.epa.gov/ghgemissions), sectors such as transportation and electricity generation account for a large share of total emissions.
+
+However, total emissions alone do not capture differences in efficiency, since larger sectors tend to produce more emissions simply due to their size. To address this, emission intensity—measured as emissions per unit of economic output—provides a complementary perspective.
+
+The central question guiding this analysis is:  
+**How do emission intensity and total emissions vary across U.S. sectors?**
+This question is important because it helps distinguish between sectors that emit the most in total and those that are less efficient in their production processes.
+
+To answer this question, we compare total emissions and emission intensity across sectors. This allows us to examine both the scale of emissions and how efficiently sectors generate economic output relative to their environmental impact.
+
+## Analysis of Total Emission
+
+### Questions
+
+In this section, we explore how greenhouse gas emissions vary across U.S. economic sectors using sector-level data.
+In particular, we aim to answer the following questions:
+
+- Which sectors contribute the most to total greenhouse gas emissions?
+- How does emission intensity vary across sectors?
+- Do sectors with high total emissions also have high emission intensity?
+
+### Total Greenhouse Gas Emissions Data
+
+In this section, we use the EPA national greenhouse gas inventory to examine differences in **total greenhouse gas emissions** across U.S. economic sectors. We focus on the year 2017 to ensure consistency with the emission intensity dataset, allowing for meaningful comparison between the two measures.
+
+This dataset, compiled by the EPA (https://www.epa.gov/ghgemissions), reports annual emissions by economic sector. The population of interest includes all U.S. sectors that contribute to greenhouse gas emissions, and our sample consists of sector-level data for 2017.
+
+Focusing on a single year allows for direct comparison across sectors, though it does not capture changes over time. The key variables include sector, year, and total emissions (measured in million metric tons of CO2 equivalent, or MMT CO2e), which allow us to compare the relative contribution of each sector to overall emissions.In addition, sector-level aggregation may mask variation within sectors, which could lead to oversimplified comparisons.
+
+```{r}
+emissions <- read_csv("data.csv")
+head(emissions)
+```
+
+### Data Preparation
+
+To prepare the dataset for sector-level comparison, we performed several data wrangling steps.
+
+First, we reshaped the data from wide to long format using `pivot_longer()`, so that yearly emissions are stored in a single column. This makes it easier to filter by year and compare sectors consistently.
+
+Next, we filtered the data to include only observations from 2017. This ensures comparability across sectors and aligns the data with the emission intensity dataset used later.
+
+We then removed the “Gross total” row, since our focus is on comparing individual sectors rather than an aggregate value.
+
+Finally, we arranged sectors in descending order of emissions to make patterns easier to interpret in subsequent analysis and visualization.
+
+After these steps, the processed dataset is shown below:
+
+```{r}
+emissions_long <- emissions %>%
+  rename(sector = 1) %>%
+  pivot_longer(
+    cols = -sector,
+    names_to = "year",
+    values_to = "emissions_mmt"
+  )
+```
+
+```{r}
+emissions_2017 <- emissions_long %>%
+  filter(year == 2017)
+```
+
+```{r}
+emissions_clean <- emissions_2017 %>%
+  filter(sector != "Gross total")
+```
+
+```{r}
+emissions_sorted <- emissions_clean %>%
+  arrange(desc(emissions_mmt))
+glimpse(emissions_2017)
+```
+
+The data is now in a tidy format, with emissions organized by sector and year. This structure allows for straightforward comparison and visualization across sectors. This transformation converts the dataset into a tidy format, where each row represents a single sector-year observation. This structure allows for more flexible filtering and comparison across sectors, which is necessary for our analysis.
+
+### Intermediate Tool: Conditional Transformation
+
+In this analysis, we use a conditional transformation with the `if_else()` function from the `dplyr` package to create a new variable (`sector_type`) that distinguishes between the “Gross total” row and individual sector rows. Using if_else() allows us to explicitly classify rows before filtering, making the data cleaning step more transparent and reproducible.
+
+This step is necessary because the dataset includes an aggregate “Gross total” value, which should not be directly compared with individual sectors. By labeling these rows, we can separate aggregate values from sector-level observations.
+
+We then filter the data to retain only sector-level rows, ensuring that subsequent analysis focuses on meaningful comparisons across sectors.
+```{r}
+#| echo: true
+#| eval: true
+emissions_clean <- emissions_2017 %>%
+  mutate(
+    sector_type = if_else(
+      sector == "Gross total",
+      "total_row",
+      "sector_row"
+    )
+  ) %>%
+  filter(sector_type == "sector_row")
+```
+
+### Results
+```{r}
+inv <- read_csv("data.csv") %>%
+  rename(sector = 1)
+
+inv_long <- inv %>%
+  pivot_longer(
+    cols = -sector,
+    names_to = "year",
+    values_to = "emissions_mmtco2e"
+  ) %>%
+  mutate(year = as.integer(year))
+
+inv_2017 <- inv_long %>%
+  filter(year == 2017, sector != "Gross total") %>%
+  arrange(desc(emissions_mmtco2e))
+```
+
+```{r}
+p_total <- ggplot(inv_2017, aes(
+  x = fct_reorder(sector, emissions_mmtco2e),
+  y = emissions_mmtco2e
+)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "Total U.S. GHG Emissions by Sector (2017)",
+    x = "Economic sector",
+    y = "Emissions (MMT CO2e)"
+  )
+
+p_total
+```
+```{r}
+inv_share <- inv_2017 %>%
+  mutate(share = emissions_mmtco2e / sum(emissions_mmtco2e))
+```
+
+To answer the question of which sectors contribute the most to total greenhouse gas emissions, we examine the distribution of emissions across sectors in 2017. 
+
+We use a bar chart to compare total emissions across sectors, as it clearly shows differences between discrete categories. Transportation and the electric power industry are the largest contributors, with emissions significantly higher than those of other sectors. Together, these sectors account for a substantial portion of total emissions, indicating that energy production and transportation are dominant sources of greenhouse gas output.
+
+The large gap between the top sectors and the rest suggests a highly skewed distribution, where a small number of sectors dominate total emissions. In contrast, sectors such as commercial and residential contribute relatively smaller amounts, while U.S. territories account for a negligible share.
+
+To better understand relative contributions, we calculate the share of total emissions for each sector and visualize it using a pie chart. This highlights how emissions are concentrated in a few key sectors rather than evenly distributed across the economy.
+
+These findings directly address our guiding question by showing that total emissions vary significantly across sectors, with transportation and energy-related sectors contributing the most. Overall, the results suggest that policies targeting these high-emitting sectors may have the greatest impact in reducing total greenhouse gas emissions.
+
+```{r}
+p_pie <- ggplot(inv_share, aes(
+  x = "",
+  y = share,
+  fill = sector
+)) +
+  geom_col(width = 1) +
+  coord_polar(theta = "y") +
+  labs(
+    title = "Share of Total U.S. GHG Emissions by Sector (2017)",
+    fill = "Economic sector"
+  ) +
+  theme_void()
+
+p_pie
+```
+
+To further examine how emissions are distributed across sectors, we analyze the proportional share of total emissions in 2017. A pie chart is useful here because it shows how each sector contributes to the overall total, making it easier to compare proportions at a glance. Consistent with the bar chart, transportation and the electric power industry account for the largest shares of total emissions.
+
+In contrast, sectors such as residential and commercial contribute much smaller shares, while U.S. territories are negligible. This suggests that emissions are concentrated in a few key sectors. The sectors with the highest total emissions also make up the largest shares, reinforcing that a small number of sectors dominate overall emissions.
+
+Overall, the pie graph suggests that focusing on these sectors could have the greatest impact on reducing overall emissions.
+
+### Total Emissions Results
+Summary statistics highlight large differences in total greenhouse gas emissions across sectors in 2017. The highest-emitting sector produces approximately `r round(max(inv_2017$emissions_mmtco2e, na.rm = TRUE), 2)` MMT CO2e, while the lowest contributes only about `r round(min(inv_2017$emissions_mmtco2e, na.rm = TRUE), 2)` MMT CO2e.
+
+The median emission level is `r round(median(inv_2017$emissions_mmtco2e, na.rm = TRUE), 2)` MMT CO2e, indicating that most sectors emit relatively moderate amounts compared to a few high-emitting sectors.
+
+Overall, the large gap between sectors suggests that emissions are not evenly distributed. Instead, a small number of sectors account for a disproportionate share of total emissions, consistent with earlier visualizations.
+
+# Emission Intensity
+
+## Emission Intensity Analysis Overview{.smaller}
+Emission intensity varies substantially across U.S. industries and reflects how carbon-intensive production is in different sectors.
+
+We’ll address the following:
+
+- Which industries have the highest emission intensity?  
+- How does emission intensity differ across sectors?  
+- Which sectors are relatively more carbon-intensive per dollar of output?  
+
+Emission intensity is measured as supply-chain greenhouse gas emissions (kg CO₂e) per dollar of industry output, based on the EPA Supply Chain GHG Emission Factors dataset.
+
+## Emission Intensity Data{.smaller}
+
+```{r}
+library(dplyr)
+glimpse(intensity)
+```
+Emission intensity data comes from the U.S. EPA Supply Chain GHG Emission Factors dataset.
+
+- Population: U.S. industries classified by NAICS codes  
+- Sample: Industries with available supply chain greenhouse gas emission factors (2017, U.S.)  
+- Key variables:  
+ - `2017 NAICS Code`: industry identifier  
+ - `intensity_no_margins` or `intensity_with_margins`: supply chain greenhouse gas emission factors (kg CO₂e per USD) 
+ 
+## Data Preparation{.smaller}
+
+To focus our analysis on industries with the highest supply chain emission intensity, we prepared the dataset by:
+
+- Removing industries with missing emission factor values
+- Selecting the 15 industries with the highest emission intensity
+- Ordering industries by intensity for clearer comparison in the plot
+After wrangling but before visualization, our data looked like:
+
+```{r}
+top_intensity <- intensity %>%
+  filter(!is.na(intensity_no_margins)) %>%
+  slice_max(intensity_no_margins, n = 15)
+
+glimpse(top_intensity)
+```
+
+## Emission Intensity Data
+```{r}
+
+p_intensity <- ggplot(
+  top_intensity,
+  aes(
+    x = reorder(`2017 NAICS Title`,
+                intensity_no_margins),
+    y = intensity_no_margins
+  )
+) +
+  geom_col(fill = "lightblue") +
+  coord_flip() +
+  labs(
+    x = "Industry (2017 NAICS)",
+    y = "Supply Chain GHG Emissions (kg CO2e per USD)"
+  )
+
+p_intensity
+```
+
+## Emission Intensity Results
+
+Highest intensity: `r round(max(top_intensity$intensity_no_margins, na.rm = TRUE), 2)`
+
+Median intensity: `r round(median(top_intensity$intensity_no_margins, na.rm = TRUE), 2)`
+
+Lowest intensity: `r round(min(top_intensity$intensity_no_margins, na.rm = TRUE), 2)`
+
+High-intensity industries are mainly cement, livestock, and energy transport sectors.
+
+
+# Conclusions
+
+## Overall Conclusion
+
+- U.S. greenhouse gas emissions are dominated by a few large sectors, especially transportation and electric power.
+
+- Emission intensity highlights different high-impact industries, such as cement and livestock, that are more carbon-intensive per unit of output.
+
+- These findings show that sector size and carbon intensity reflect different dimensions of environmental impact.
+
+- Using both metrics together provides a more complete picture of sector-level climate impacts in the U.S.
+
+## Limitations & Future Directions {.smaller}
+
+**Limitations**
+
+- The two datasets summarize emissions at different levels (sectors vs. NAICS industries), so comparisons are not perfectly one-to-one.
+
+- Emission intensity factors are model-based estimates, not direct measurements for every industry.
+
+- The analysis focuses on a single year (2017), so temporal trends are not captured.
+
+**Future directions**
+
+- Add a crosswalk to connect sectors and NAICS industries more directly.
+
+- Compare multiple years to study trends and stability.
+
+- Explore drivers of intensity (e.g., energy mix, technology, or supply chain structure).
+
+## Project Summary{.smaller}
+
+**Group Members:** Yuxin Zheng, Annie Yang
+
+**Lab Section:** INFO 201AE--George Lee
+
+**Data Sets:**
+
+- [U.S. Total GHG Emissions by Economic Sector](https://catalog.data.gov/dataset/national-greenhouse-gas-emission-inventory)
+- [U.S. Supply Chain Emission Intensity (EPA USEEIO)](https://catalog.data.gov/dataset/supply-chain-greenhouse-gas-emission-factors-v1-3-by-naics-6)
+
+**Basic tools used:** filter(), summarize(), slice_max(), pivot_longer(), mutate(), arrange()
+
+**Intermediate tool used:** Conditional transformation (if_else)
+
+
+
+
